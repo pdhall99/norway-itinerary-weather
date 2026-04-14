@@ -1,0 +1,44 @@
+name: Update weather for itinerary
+
+on:
+  schedule:
+    - cron: '0 */3 * * *' # Every 3 hours
+  workflow_dispatch:      # Manual trigger button
+
+concurrency:
+  group: update
+  cancel-in-progress: true
+
+# Give the action permission to write back to the repo (for the HTML file)
+permissions:
+  contents: write
+
+jobs:
+  update-weather:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+        with:
+          enable-cache: true
+          cache-dependency-glob: "norway_itinerary_weather.py"
+
+      - name: Run Scraper with uv
+        run: uv run norway_itinerary_weather.py
+        env:
+          UV_PYTHON_PREFERENCE: only-managed
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update weather: $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
