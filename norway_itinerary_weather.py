@@ -97,6 +97,7 @@ async def fetch_one(client, url):
 
 async def main():
     results = []
+    today = datetime.datetime.now(datetime.UTC).date()
 
     async with httpx.AsyncClient(
         http2=True, headers={"User-Agent": USER_AGENT}
@@ -105,6 +106,7 @@ async def main():
             print(f"Fetching {stop['loc']}...")
 
             d_str = stop["date"]
+            target_date = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
             lat, lon, s_lat, s_lon = (
                 stop["lat"],
                 stop["lon"],
@@ -192,13 +194,11 @@ async def main():
                     sn["properties"].get("sunset", {}).get("time", "    ")[11:16]
                 )
 
-            offset = (
-                datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
-                - datetime.datetime.now(datetime.UTC).date()
-            ).days
-            data["url"] = (
-                f"https://www.yr.no/en/forecast/hourly-table/{lat:.3f},{lon:.3f}/Norway/{lat:.3f},{lon:.3f}?i={offset}"
-            )
+            day_offset = (target_date - today).days
+            # Yr.no URL format: hourly-table/{lat,lon}/Norway/{lat,lon}?i={offset}
+            # Note: format coords to 3 decimal places as per Yr.no standard
+            l1, n1 = f"{stop['lat']:.3f}", f"{stop['lon']:.3f}"
+            data["url"] = f"https://www.yr.no/en/forecast/daily-table/{l1},{n1}/Norway/{l1},{n1}"
             results.append({**stop, **data})
 
             # Be polite to the API
@@ -272,7 +272,7 @@ async def main():
 
                 <div class="sun-row">
                     <span>🌅 {r['rise']}</span>
-                    <a href="{r['url']}" class="yr-btn" target="_blank">HOURLY TABLE ↗</a>
+                    <a href="{r['url']}" class="yr-btn" target="_blank">DAILY TABLE ↗</a>
                     <span>🌇 {r['set']}</span>
                 </div>
             </div>
@@ -291,6 +291,7 @@ async def main():
             </footer>
         </div>
     </body>
+    
     </html>
     """
     with open("index.html", "w") as f:
