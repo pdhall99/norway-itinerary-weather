@@ -12,77 +12,54 @@ import logging
 import httpx
 
 logging.basicConfig(level=logging.DEBUG, force=True)
-
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-USER_AGENT = "github.com/pdhall99/itinerary-weather"
+USER_AGENT = "github.com/pdhall99/north-america-itinerary-weather"
 
-# Pushing coordinates further offshore to avoid "Land Mask" issues
+# Itinerary
 ITINERARY = [
     {
-        "date": "2026-04-18",
-        "loc": "Southampton",
-        "lat": 50.90,
-        "lon": -1.40,
-        "s_lat": 50.50,
-        "s_lon": -1.00,
+        "date": "2026-05-19",
+        "loc": "Seattle",
+        "lat": 47.61,
+        "lon": -122.33,
     },
     {
-        "date": "2026-04-19",
-        "loc": "🌊 North Sea",
-        "lat": 56.00,
-        "lon": 1.00,
-        "s_lat": 56.00,
-        "s_lon": 1.00,
+        "date": "2026-05-25",
+        "loc": "Haines",
+        "lat": 59.23,
+        "lon": -135.44,
     },
     {
-        "date": "2026-04-20",
-        "loc": "Stavanger",
-        "lat": 58.97,
-        "lon": 5.73,
-        "s_lat": 59.00,
-        "s_lon": 5.00,
+        "date": "2026-05-25",
+        "loc": "Juneau",
+        "lat": 58.30,
+        "lon": -134.42,
     },
     {
-        "date": "2026-04-21",
-        "loc": "Olden",
-        "lat": 61.83,
-        "lon": 6.81,
-        "s_lat": 62.00,
-        "s_lon": 4.50,
+        "date": "2026-06-04",
+        "loc": "Vancouver",
+        "lat": 49.28,
+        "lon": -123.12,
     },
     {
-        "date": "2026-04-22",
-        "loc": "Ålesund",
-        "lat": 62.47,
-        "lon": 6.15,
-        "s_lat": 62.60,
-        "s_lon": 5.50,
+        "date": "2026-06-06",
+        "loc": "Jasper",
+        "lat": 52.88,
+        "lon": -118.08,
     },
     {
-        "date": "2026-04-23",
-        "loc": "Haugesund",
-        "lat": 59.41,
-        "lon": 5.27,
-        "s_lat": 59.40,
-        "s_lon": 4.50,
+        "date": "2026-06-10",
+        "loc": "Banff",
+        "lat": 51.18,
+        "lon": -115.57,
     },
     {
-        "date": "2026-04-24",
-        "loc": "🌊 English Channel",
-        "lat": 52.00,
-        "lon": 1.00,
-        "s_lat": 52.00,
-        "s_lon": 1.00,
-    },
-    {
-        "date": "2026-04-25",
-        "loc": "Southampton",
-        "lat": 50.90,
-        "lon": -1.40,
-        "s_lat": 50.50,
-        "s_lon": -1.00,
+        "date": "2026-06-12",
+        "loc": "Niagara Falls",
+        "lat": 43.09,
+        "lon": -79.08,
     },
 ]
 
@@ -107,102 +84,85 @@ async def main():
 
             d_str = stop["date"]
             target_date = datetime.datetime.strptime(d_str, "%Y-%m-%d").date()
-            lat, lon, s_lat, s_lon = (
-                stop["lat"],
-                stop["lon"],
-                stop["s_lat"],
-                stop["s_lon"],
+            lat, lon = stop["lat"], stop["lon"]
+
+            # Open-Meteo API
+            forecast_url = (
+                "https://api.open-meteo.com/v1/forecast?"
+                f"latitude={lat}&longitude={lon}&"
+                "hourly=temperature_2m,precipitation_probability,wind_speed_10m,weather_code&"
+                "daily=sunrise,sunset,temperature_2m_max,temperature_2m_min&"
+                "timezone=auto&"
+                f"start_date={d_str}&end_date={d_str}"
+                "&wind_speed_unit=mph"
             )
 
-            # Fetch Endpoints
-            wf = await fetch_one(
-                client,
-                f"https://api.met.no/weatherapi/locationforecast/2.0/complete?lat={lat}&lon={lon}",
-            )
-            oc = await fetch_one(
-                client,
-                f"https://api.met.no/weatherapi/oceanforecast/2.0/complete?lat={s_lat}&lon={s_lon}",
-            )
-            sn = await fetch_one(
-                client,
-                f"https://api.met.no/weatherapi/sunrise/3.0/sun?lat={lat}&lon={lon}&date={d_str}&offset=+02:00",
-            )
+            wf = await fetch_one(client, forecast_url)
 
             data = {
                 "t_mid": "-",
                 "t_min": "-",
+                "t_max": "-",
                 "wind": "-",
                 "rain": "-",
                 "sym": "unknown",
-                "wave": "-",
-                "flow": "-",
-                "w_temp": "-",
                 "rise": "-:-",
                 "set": "-:-",
             }
 
             if wf:
-                ts = wf["properties"]["timeseries"]
-                mid = next((t for t in ts if f"{d_str}T12:00:00Z" in t["time"]), ts[0])
-                data["t_mid"] = round(
-                    mid["data"]["instant"]["details"]["air_temperature"]
-                )
-                data["wind"] = round(mid["data"]["instant"]["details"]["wind_speed"])
-                p = mid["data"].get("next_6_hours") or mid["data"].get("next_12_hours")
-                if p:
-                    data["sym"] = p["summary"]["symbol_code"]
-                    data["rain"] = round(
-                        p["details"].get("probability_of_precipitation", 0)
-                    )
-                all_t = [
-                    t["data"]["instant"]["details"]["air_temperature"]
-                    for t in ts
-                    if d_str in t["time"]
-                ]
-                if all_t:
-                    data["t_min"] = round(min(all_t))
+                # Daily data
+                if wf.get("daily"):
+                    daily = wf["daily"]
+                    if daily.get("temperature_2m_max"):
+                        data["t_max"] = round(daily["temperature_2m_max"][0])
+                    if daily.get("temperature_2m_min"):
+                        data["t_min"] = round(daily["temperature_2m_min"][0])
+                    if daily.get("sunrise"):
+                        sunrise = daily["sunrise"][0]
+                        data["rise"] = sunrise[11:16] if len(sunrise) > 11 else "-:-"
+                    if daily.get("sunset"):
+                        sunset = daily["sunset"][0]
+                        data["set"] = sunset[11:16] if len(sunset) > 11 else "-:-"
 
-            found_oc = False
-            if oc:
-                for entry in oc["properties"]["timeseries"]:
-                    if f"{d_str}T12:00:00Z" in entry["time"]:
-                        det = entry["data"]["instant"]["details"]
-                        if det.get("sea_surface_wave_height") is not None:
-                            data["wave"], data["flow"], data["w_temp"] = (
-                                det["sea_surface_wave_height"],
-                                det["sea_water_speed"],
-                                det["sea_water_temperature"],
-                            )
-                            found_oc = True
+                # Hourly data (get midday values)
+                if wf.get("hourly"):
+                    hourly = wf["hourly"]
+                    times = hourly.get("time", [])
 
-            if not found_oc:
-                om = await fetch_one(
-                    client,
-                    f"https://marine-api.open-meteo.com/v1/marine?latitude={s_lat}&longitude={s_lon}&hourly=wave_height&timezone=GMT",
-                )
-                if om:
-                    for i, t in enumerate(om["hourly"]["time"]):
-                        if f"{d_str}T12:00" in t:
-                            data["wave"] = om["hourly"]["wave_height"][i]
+                    # Find noon or closest hour
+                    target_hour = f"{d_str}T12:00"
+                    idx = None
+                    for i, t in enumerate(times):
+                        if target_hour in t:
+                            idx = i
                             break
 
-            if sn:
-                data["rise"] = (
-                    sn["properties"].get("sunrise", {}).get("time", "    ")[11:16]
-                )
-                data["set"] = (
-                    sn["properties"].get("sunset", {}).get("time", "    ")[11:16]
-                )
+                    if idx is None and times:
+                        # Fallback to first available hour
+                        idx = 0
 
-            day_offset = (target_date - today).days
-            # Yr.no URL format: hourly-table/{lat,lon}/Norway/{lat,lon}?i={offset}
-            # Note: format coords to 3 decimal places as per Yr.no standard
-            l1, n1 = f"{stop['lat']:.3f}", f"{stop['lon']:.3f}"
-            data["url"] = f"https://www.yr.no/en/forecast/daily-table/{l1},{n1}/Norway/{l1},{n1}"
+                    if idx is not None:
+                        if hourly.get("temperature_2m"):
+                            data["t_mid"] = round(hourly["temperature_2m"][idx])
+                        if hourly.get("wind_speed_10m"):
+                            data["wind"] = round(hourly["wind_speed_10m"][idx])
+                        if hourly.get("precipitation_probability"):
+                            data["rain"] = round(
+                                hourly["precipitation_probability"][idx]
+                            )
+                        if hourly.get("weather_code"):
+                            # Map Open-Meteo weather codes to simple descriptors
+                            wmo_code = hourly["weather_code"][idx]
+                            data["sym"] = map_weather_code(wmo_code)
+
+            # Generate forecast URL
+            data["url"] = f"https://open-meteo.com/en/docs#{lat},{lon}"
+
             results.append({**stop, **data})
 
             # Be polite to the API
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.5)
 
     # --- HTML GENERATION ---
     html = f"""\
@@ -213,29 +173,28 @@ async def main():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Itinerary weather</title>
         <style>
-            body {{ font-family: -apple-system, sans-serif; background: #000b14; color: #e0e0e0; padding: 15px; margin: 0; }}
+            body {{ font-family: -apple-system, sans-serif; background: #0a1628; color: #e0e0e0; padding: 15px; margin: 0; }}
             .container {{ max-width: 500px; margin: auto; }}
-            h1 {{ font-weight: 200; color: #4fc3f7; text-align: center; margin-bottom: 25px; }}
-            .card {{ background: linear-gradient(180deg, #011f35 0%, #00121a 100%); border-radius: 20px; padding: 20px; margin-bottom: 15px; border: 1px solid #1a3a4a; }}
+            h1 {{ font-weight: 200; color: #60a5fa; text-align: center; margin-bottom: 25px; }}
+            .card {{ background: linear-gradient(180deg, #1e3a5f 0%, #0f1c2e 100%); border-radius: 20px; padding: 20px; margin-bottom: 15px; border: 1px solid #2d4a6f; }}
             .header {{ display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 12px; margin-bottom: 15px; }}
             .city {{ font-size: 1.3em; font-weight: bold; color: #fff; }}
             .temp-block {{ text-align: right; }}
             .temp-max {{ font-size: 2.2em; font-weight: 100; color: #fff; line-height: 1; }}
             .temp-min {{ font-size: 0.8em; opacity: 0.5; margin-top: 4px; }}
             .metrics-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; gap: 10px; margin-bottom: 20px; }}
-            .ocean-stats {{ background: rgba(0,0,0,0.4); padding: 15px; border-radius: 12px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; font-size: 0.75em; border: 1px solid rgba(255,255,255,0.05); text-align: center; }}
             .lbl {{ display: block; font-size: 0.65em; opacity: 0.5; text-transform: uppercase; margin-bottom: 4px; }}
             .val {{ font-weight: bold; color: #fff; font-size: 1.1em; }}
             .sun-row {{ display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 10px; font-size: 0.85em; }}
-            .yr-btn {{ background: #4fc3f7; color: #001a2c; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 0.75em; font-weight: bold; }}
-            img.icon {{ width: 50px; display: block; margin: auto; }}
+            .om-btn {{ background: #60a5fa; color: #0a1628; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 0.75em; font-weight: bold; }}
+            .weather-icon {{ font-size: 3em; text-align: center; }}
             footer {{ text-align: center; font-size: 0.7em; opacity: 0.3; margin-top: 40px; line-height: 1.6; padding-bottom: 40px; }}
-            footer a {{ color: #4fc3f7; text-decoration: none; }}
+            footer a {{ color: #60a5fa; text-decoration: none; }}
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>Itinerary weather</h1>
+            <h1>🏔️ Itinerary weather</h1>
             {
         "".join(
             [
@@ -247,7 +206,7 @@ async def main():
                         <div class="city">{r['loc']}</div>
                     </div>
                     <div class="temp-block">
-                        <div class="temp-max">{r['t_mid']}°</div>
+                        <div class="temp-max">{r['t_max']}°</div>
                         <div class="temp-min">Min: {r['t_min']}°</div>
                     </div>
                 </div>
@@ -255,24 +214,18 @@ async def main():
                 <div class="metrics-grid">
                     <div style="text-align:left;">
                         <span class="lbl">Prob. Rain</span>
-                        <span class="val" style="color:#4fc3f7;">💧 {r['rain']}%</span>
+                        <span class="val" style="color:#60a5fa;">💧 {r['rain']}%</span>
                     </div>
-                    <div style="text-align:center;"><img class="icon" src="https://raw.githubusercontent.com/metno/weathericons/main/weather/svg/{r['sym']}.svg"></div>
+                    <div class="weather-icon">{get_weather_emoji(r['sym'])}</div>
                     <div style="text-align:right;">
                         <span class="lbl">Wind</span>
-                        <span class="val">💨 {r['wind']} m/s</span>
+                        <span class="val">💨 {r['wind']} mph</span>
                     </div>
-                </div>
-
-                <div class="ocean-stats">
-                    <div><span class="lbl">Waves</span><span class="val">🌊 {r['wave']}m</span></div>
-                    <div><span class="lbl">Water Flow</span><span class="val">⚓ {r['flow']}m/s</span></div>
-                    <div><span class="lbl">Sea Temp</span><span class="val">🌡️ {r['w_temp']}°</span></div>
                 </div>
 
                 <div class="sun-row">
                     <span>🌅 {r['rise']}</span>
-                    <a href="{r['url']}" class="yr-btn" target="_blank">DAILY TABLE ↗</a>
+                    <a href="{r['url']}" class="om-btn" target="_blank">FORECAST ↗</a>
                     <span>🌇 {r['set']}</span>
                 </div>
             </div>
@@ -283,19 +236,58 @@ async def main():
     }
 
             <footer>
-                Weather data from <a href="https://www.met.no/en">MET Norway</a><br>
-                Marine data via <a href="https://open-meteo.com/">Open-Meteo</a><br>
+                Weather data from <a href="https://open-meteo.com/">Open-Meteo</a><br>
                 Updated: {
         datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
     }
             </footer>
         </div>
     </body>
-    
     </html>
     """
     with open("index.html", "w") as f:
         f.write(html)
+
+
+def map_weather_code(code):
+    """
+    Map WMO weather codes to simplified weather conditions.
+    https://open-meteo.com/en/docs
+    """
+    if code == 0:
+        return "clear"
+    elif code in [1, 2]:
+        return "partly_cloudy"
+    elif code == 3:
+        return "cloudy"
+    elif code in [45, 48]:
+        return "fog"
+    elif code in [51, 53, 55, 56, 57]:
+        return "drizzle"
+    elif code in [61, 63, 65, 66, 67, 80, 81, 82]:
+        return "rain"
+    elif code in [71, 73, 75, 77, 85, 86]:
+        return "snow"
+    elif code in [95, 96, 99]:
+        return "thunderstorm"
+    else:
+        return "unknown"
+
+
+def get_weather_emoji(condition):
+    """Convert weather condition to emoji"""
+    emoji_map = {
+        "clear": "☀️",
+        "partly_cloudy": "⛅",
+        "cloudy": "☁️",
+        "fog": "🌫️",
+        "drizzle": "🌦️",
+        "rain": "🌧️",
+        "snow": "❄️",
+        "thunderstorm": "⛈️",
+        "unknown": "🌡️",
+    }
+    return emoji_map.get(condition, "🌡️")
 
 
 if __name__ == "__main__":
