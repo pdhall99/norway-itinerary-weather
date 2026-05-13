@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.DEBUG, force=True)
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-USER_AGENT = "github.com/pdhall99/norway-itinerary-weather"
+USER_AGENT = "github.com/pdhall99/itinerary-weather"
 
 # Pushing coordinates further offshore to avoid "Land Mask" issues
 ITINERARY = [
@@ -211,7 +211,7 @@ async def main():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Norway itinerary weather</title>
+        <title>Itinerary weather</title>
         <style>
             body {{ font-family: -apple-system, sans-serif; background: #000b14; color: #e0e0e0; padding: 15px; margin: 0; }}
             .container {{ max-width: 500px; margin: auto; }}
@@ -235,7 +235,7 @@ async def main():
     </head>
     <body>
         <div class="container">
-            <h1>Norway itinerary weather</h1>
+            <h1>Itinerary weather</h1>
             {
         "".join(
             [

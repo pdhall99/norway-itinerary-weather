@@ -24,10 +24,10 @@ jobs:
         uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
         with:
           enable-cache: true
-          cache-dependency-glob: "norway_itinerary_weather.py"
+          cache-dependency-glob: "itinerary_weather.py"
 
-      - name: Run Scraper with uv
-        run: uv run norway_itinerary_weather.py
+      - name: Run script
+        run: uv run itinerary_weather.py
         env:
           UV_PYTHON_PREFERENCE: only-managed
 
